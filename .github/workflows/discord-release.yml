@@ -66,7 +66,7 @@ jobs:
                       type: 2,
                       style: 5,
                       label: "GitHub Releases",
-                      url: "https://github.com/Vyriv/Skylist-/releases/latest"
+                      url: "https://github.com/Vyriv/Skylistplus/releases/latest"
                     },
                     {
                       type: 2,
