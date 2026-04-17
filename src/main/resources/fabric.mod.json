@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "skylistplus",
+  "version": "${version}",
+  "name": "Skylist+",
+  "description": "Skylist+ adds thrower list, dungeon autokick, and misc modules on top of Skylist.",
+  "authors": [
+    "Vyriv"
+  ],
+  "icon": "assets/throwerlist/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.ryan.throwerlist.SkylistPlusMod"
+    ]
+  },
+  "mixins": [
+    "skylistplus.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=21",
+    "fabric-api": "*",
+    "fabric-language-kotlin": "*",
+    "skylist": ">=1.0.0-0"
+  }
+}

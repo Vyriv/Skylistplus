@@ -1,0 +1,12 @@
+.gradle/
+build/
+**/.gradle/
+**/build/
+**/run/
+**/out/
+**/bin/
+.idea/
+.kotlin/
+Shared resources/
+resources/assets/capes/
+docs/

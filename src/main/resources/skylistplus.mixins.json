@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "package": "dev.ryan.throwerlist.mixin",
+  "refmap": "skylistplus.refmap.json",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AddonChatHudMixin",
+    "AddonPlayerListEntryMixin",
+    "AddonPlayerListHudMixin",
+    "ChatInputSuggestorMixin",
+    "LivingEntityMixin",
+    "SkyHanniCompactTabListMixin",
+    "SkyHanniTabLineMixin",
+    "PartyFinderScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
