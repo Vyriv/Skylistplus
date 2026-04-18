@@ -1,4 +1,3 @@
-SKYLIST+ (addon)
 
 # **Skylist+**
 
