@@ -207,7 +207,7 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
         }
 
         if (donationButtonRect().contains(mouseX, mouseY)) {
-            Util.getOperatingSystem().open(URI.create("https://buymeacoffee.com/skylist"))
+            Util.getOperatingSystem().open(URI.create("https://ko-fi.com/vyriv"))
             return true
         }
 

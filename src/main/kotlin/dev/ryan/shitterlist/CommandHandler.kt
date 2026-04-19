@@ -456,14 +456,14 @@ object CommandHandler {
             Text.empty()
                 .append(Text.literal("[SL] ").formatted(Formatting.AQUA))
                 .append(Text.literal("Installed version is currently ").formatted(Formatting.GREEN))
-                .append(
-                    Text.literal(currentVersion)
-                        .formatted(Formatting.YELLOW)
-                        .styled {
-                            it.withClickEvent(ClickEvent.OpenUrl(URI.create(ThrowerListLinks.modrinthVersionsUrl)))
-                                .withHoverEvent(HoverEvent.ShowText(Text.literal("Open Skylist versions page")))
-                        },
-                )
+                    .append(
+                        Text.literal(currentVersion)
+                            .formatted(Formatting.YELLOW)
+                            .styled {
+                            it.withClickEvent(ClickEvent.OpenUrl(URI.create(ThrowerListLinks.githubReleasesUrl)))
+                                 .withHoverEvent(HoverEvent.ShowText(Text.literal("Open Skylist+ GitHub releases")))
+                            },
+                    )
                 .append(
                     latestKnownVersion?.let {
                         Text.literal(" Latest known: ").formatted(Formatting.GREEN)
