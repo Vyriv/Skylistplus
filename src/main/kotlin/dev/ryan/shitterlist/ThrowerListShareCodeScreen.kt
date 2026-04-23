@@ -113,11 +113,13 @@ class ThrowerListShareCodeScreen(
             showStatus(decoded.error, 0xFFFF7777.toInt())
             return
         }
-        val result = ConfigManager.importPlayers(decoded.entries.map { it.copy() })
+        val filteredEntries = ProtectedSkylistEntries.filterImportEntries(decoded.entries.map { it.copy() })
+        val blockedCount = decoded.entries.size - filteredEntries.size
+        val result = ConfigManager.importPlayers(filteredEntries)
         val message = if (result.importedCount <= 0) {
-            "No new local entries were imported. Skipped ${result.skippedCount}."
-        } else if (result.skippedCount > 0) {
-            "Imported ${result.importedCount} local entries and skipped ${result.skippedCount}."
+            "No new local entries were imported. Skipped ${result.skippedCount + blockedCount}."
+        } else if (result.skippedCount + blockedCount > 0) {
+            "Imported ${result.importedCount} local entries and skipped ${result.skippedCount + blockedCount}."
         } else {
             "Imported ${result.importedCount} local entries."
         }

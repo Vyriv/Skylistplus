@@ -272,25 +272,28 @@ object CommandHandler {
             return 0
         }
 
-        val result = ConfigManager.importPlayers(decoded.entries.map { it.copy() })
+        val filteredEntries = ProtectedSkylistEntries.filterImportEntries(decoded.entries.map { it.copy() })
+        val blockedCount = decoded.entries.size - filteredEntries.size
+        val result = ConfigManager.importPlayers(filteredEntries)
         if (result.importedCount <= 0) {
             source.sendFeedback(
                 tlMessage(
                     Text.literal("No new local entries were imported. ")
                         .formatted(Formatting.YELLOW)
-                        .append(Text.literal("Skipped ${result.skippedCount}.").formatted(Formatting.GRAY)),
+                        .append(Text.literal("Skipped ${result.skippedCount + blockedCount}.").formatted(Formatting.GRAY)),
                 ),
             )
             return Command.SINGLE_SUCCESS
         }
 
+        val skippedCount = result.skippedCount + blockedCount
         source.sendFeedback(
             tlMessage(
                 Text.literal("Imported ${result.importedCount} local entries")
                     .formatted(Formatting.GREEN)
                     .append(
-                        if (result.skippedCount > 0) {
-                            Text.literal(" and skipped ${result.skippedCount} duplicates").formatted(Formatting.YELLOW)
+                        if (skippedCount > 0) {
+                            Text.literal(" and skipped $skippedCount blocked/duplicate entries").formatted(Formatting.YELLOW)
                         } else {
                             Text.empty()
                         },
@@ -327,6 +330,11 @@ object CommandHandler {
                 val duplicate = ConfigManager.findByUuid(resolved.uuid) ?: ConfigManager.findByUsername(resolved.username)
                 if (duplicate != null) {
                     source.sendError(tlMessage("${resolved.username} is already on your Skylist"))
+                    return@execute
+                }
+
+                if (ProtectedSkylistEntries.isProtected(resolved.username, resolved.uuid)) {
+                    source.sendError(tlMessage(ProtectedSkylistEntries.rejectionMessage()))
                     return@execute
                 }
 

@@ -495,6 +495,11 @@ class ThrowerListListScreen(
                     return@execute
                 }
 
+                if (ProtectedSkylistEntries.isProtected(resolved.username, resolved.uuid)) {
+                    editor.showError(ProtectedSkylistEntries.rejectionMessage())
+                    return@execute
+                }
+
                 if (ContentManager.isProtectedCreditUsername(resolved.username)) {
                     editor.showError("My beta testers are not throwers :(")
                     return@execute
@@ -603,6 +608,11 @@ class ThrowerListListScreen(
         if (existingLocal != null) {
             ConfigManager.updateLocalEntry(existingLocal.username, newReason, newTags, ignored, autoRemoveAfter, expiresAt)
         } else {
+            if (ProtectedSkylistEntries.isProtected(entry.username, entry.uuid)) {
+                showStatus(ProtectedSkylistEntries.rejectionMessage(), statusErrorColor)
+                return
+            }
+
             if (ContentManager.isProtectedCreditUsername(entry.username)) {
                 showStatus("My beta testers are not throwers :(", statusErrorColor)
                 return

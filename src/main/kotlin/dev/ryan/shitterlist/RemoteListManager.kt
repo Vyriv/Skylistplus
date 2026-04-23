@@ -39,6 +39,10 @@ object RemoteListManager {
 
     fun findReasonByUuid(uuid: String): String? {
         val normalizedUuid = uuid.lowercase()
+        if (ProtectedSkylistEntries.isProtectedUuid(normalizedUuid)) {
+            return null
+        }
+
         if (ConfigManager.isRemoteDisabled(normalizedUuid)) {
             return null
         }
@@ -51,6 +55,10 @@ object RemoteListManager {
 
     fun findEntryByUuid(uuid: String): RemoteEntry? {
         val normalizedUuid = uuid.lowercase()
+        if (ProtectedSkylistEntries.isProtectedUuid(normalizedUuid)) {
+            return null
+        }
+
         val reason = remoteReasons[normalizedUuid] ?: return null
         return RemoteEntry(
             username = remoteUsernames[normalizedUuid] ?: normalizedUuid,
@@ -62,10 +70,18 @@ object RemoteListManager {
         )
     }
 
-    fun findEntryByUsername(username: String): RemoteEntry? =
-        remoteUsernames.entries.firstOrNull {
+    fun findEntryByUsername(username: String): RemoteEntry? {
+        if (ProtectedSkylistEntries.isProtectedUsername(username)) {
+            return null
+        }
+
+        return remoteUsernames.entries.firstOrNull {
             it.value.equals(username, ignoreCase = true)
         }?.let { entry ->
+            if (ProtectedSkylistEntries.isProtected(entry.value, entry.key)) {
+                return@let null
+            }
+
             val reason = remoteReasons[entry.key] ?: return@let null
             RemoteEntry(
                 username = entry.value,
@@ -76,12 +92,23 @@ object RemoteListManager {
                 tags = remoteTags[entry.key].orEmpty(),
             )
         }
+    }
 
     fun updateUsername(uuid: String, username: String) {
-        remoteUsernames[uuid.lowercase()] = username
+        val normalizedUuid = uuid.lowercase()
+        if (ProtectedSkylistEntries.isProtected(username, normalizedUuid)) {
+            remoteReasons.remove(normalizedUuid)
+            remoteTimestamps.remove(normalizedUuid)
+            remoteUsernames.remove(normalizedUuid)
+            remoteTags.remove(normalizedUuid)
+            return
+        }
+
+        remoteUsernames[normalizedUuid] = username
     }
 
     fun listEntries(): List<RemoteEntry> = remoteReasons.entries
+        .filterNot { ProtectedSkylistEntries.isProtected(uuid = it.key) }
         .map { entry ->
             val uuid = entry.key
             RemoteEntry(
@@ -132,13 +159,26 @@ object RemoteListManager {
         remoteTags.clear()
         parsed.entrySet().forEach { (uuid, data) ->
             val normalizedUuid = uuid.lowercase()
+            if (ProtectedSkylistEntries.isProtectedUuid(normalizedUuid)) {
+                return@forEach
+            }
+
             val remoteData = parseRemoteData(data) ?: return@forEach
             remoteReasons[normalizedUuid] = remoteData.reason
             remoteTimestamps[normalizedUuid] = remoteData.ts ?: ConfigManager.getOrCreateRemoteImportTimestamp(normalizedUuid)
             remoteTags[normalizedUuid] = remoteData.tags
             remoteUsernames.computeIfAbsent(normalizedUuid) { normalizedUuid }
             UsernameResolver.resolveUuid(normalizedUuid).thenAccept { username ->
-                if (!username.isNullOrBlank()) {
+                if (username.isNullOrBlank()) {
+                    return@thenAccept
+                }
+
+                if (ProtectedSkylistEntries.isProtected(username, normalizedUuid)) {
+                    remoteReasons.remove(normalizedUuid)
+                    remoteTimestamps.remove(normalizedUuid)
+                    remoteUsernames.remove(normalizedUuid)
+                    remoteTags.remove(normalizedUuid)
+                } else {
                     remoteUsernames[normalizedUuid] = username
                 }
             }
