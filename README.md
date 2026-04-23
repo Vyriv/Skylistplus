@@ -1,4 +1,4 @@
-# **Skylist+**
+# **Skylist+** (REQUIRES SKYLIST)
 
 Skylist+ is an expansion mod for Skylist that adds advanced player tracking, party control, and list management tools.
 
