@@ -145,6 +145,18 @@ object CommandHandler {
                     ),
                 ),
             )
+            .then(literal("failpbs")
+                .executes(::showFailPbs)
+                .then(literal("reset")
+                    .then(argument("puzzle", StringArgumentType.greedyString())
+                        .suggests(::suggestFailPbPuzzles)
+                        .executes(::resetFailPb),
+                    ),
+                )
+                .then(literal("resetall")
+                    .executes(::resetAllFailPbs),
+                ),
+            )
 
     private fun printHelp(source: FabricClientCommandSource): Int {
         source.sendFeedback(Text.literal("Skylist commands:").formatted(Formatting.GOLD))
@@ -231,6 +243,61 @@ object CommandHandler {
         context.source.sendFeedback(helpLine("settings", "importlist", "<code>"))
         context.source.sendFeedback(helpLine("settings", "autokick", "on/off"))
         context.source.sendFeedback(helpLine("settings", "notifications", "on/off"))
+        context.source.sendFeedback(helpLine("failpbs"))
+        context.source.sendFeedback(helpLine("failpbs", "reset", "<puzzle>"))
+        context.source.sendFeedback(helpLine("failpbs", "resetall"))
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun showFailPbs(context: CommandContext<FabricClientCommandSource>): Int {
+        val source = context.source
+        val pbs = DungeonPuzzleFailPbStore.allPbs()
+        if (pbs.isEmpty()) {
+            source.sendFeedback(tlMessage(Text.literal("No dungeon puzzle fail PBs saved yet.").formatted(Formatting.GRAY)))
+            return Command.SINGLE_SUCCESS
+        }
+
+        source.sendFeedback(tlMessage(Text.literal("Dungeon puzzle fail PBs:").formatted(Formatting.GOLD)))
+        DungeonPuzzleFailPbTracker.Puzzle.entries.forEach { puzzle ->
+            val pb = pbs[puzzle.id] ?: return@forEach
+            source.sendFeedback(
+                tlMessage(
+                    Text.literal("${puzzle.displayName}: ").formatted(Formatting.YELLOW)
+                        .append(Text.literal("${DungeonPuzzleFailPbTracker.formatSeconds(pb)}s").formatted(Formatting.LIGHT_PURPLE)),
+                ),
+            )
+        }
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun resetFailPb(context: CommandContext<FabricClientCommandSource>): Int {
+        val source = context.source
+        val puzzleInput = StringArgumentType.getString(context, "puzzle")
+        val puzzle = DungeonPuzzleFailPbTracker.Puzzle.fromInput(puzzleInput)
+        if (puzzle == null) {
+            source.sendError(tlMessage("Unknown puzzle. Use: Three Weirdos, Tic Tac Toe, Higher Or Lower, or Quiz"))
+            return 0
+        }
+
+        val removed = DungeonPuzzleFailPbStore.resetPb(puzzle.id)
+        source.sendFeedback(
+            tlMessage(
+                Text.literal(
+                    if (removed) "Reset fail PB for ${puzzle.displayName}."
+                    else "No saved fail PB for ${puzzle.displayName}.",
+                ).formatted(if (removed) Formatting.GREEN else Formatting.GRAY),
+            ),
+        )
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun resetAllFailPbs(context: CommandContext<FabricClientCommandSource>): Int {
+        DungeonPuzzleFailPbStore.resetAll()
+        context.source.sendFeedback(
+            tlMessage(
+                Text.literal("Cleared all dungeon puzzle fail PBs.").formatted(Formatting.GREEN),
+            ),
+        )
         return Command.SINGLE_SUCCESS
     }
 
@@ -1013,6 +1080,15 @@ object CommandHandler {
         ConfigManager.localUsernames(),
         builder,
     )
+
+    private fun suggestFailPbPuzzles(
+        context: CommandContext<FabricClientCommandSource>,
+        builder: SuggestionsBuilder,
+    ): CompletableFuture<Suggestions> =
+        CommandSource.suggestMatching(
+            DungeonPuzzleFailPbTracker.Puzzle.entries.map { puzzle -> puzzle.displayName },
+            builder,
+        )
 
     private fun suggestAddableUsernames(
         context: CommandContext<FabricClientCommandSource>,

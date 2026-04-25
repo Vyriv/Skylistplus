@@ -50,6 +50,8 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
     private var frameWidthProgress = 0f
     private var moduleExpanded = false
     private var moduleExpansionProgress = 0f
+    private var failPbModuleExpanded = false
+    private var failPbModuleExpansionProgress = 0f
     private var statusMessage: String? = null
     private var statusColor = 0xFF7FD6FF.toInt()
 
@@ -106,6 +108,7 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
         sidebarAnimationProgress = animateSidebarProgress(sidebarAnimationProgress, if (sidebarExpanded) 1f else 0f)
         frameWidthProgress = animateSidebarProgress(frameWidthProgress, 1f)
         moduleExpansionProgress = animateSidebarProgress(moduleExpansionProgress, if (moduleExpanded) 1f else 0f)
+        failPbModuleExpansionProgress = animateSidebarProgress(failPbModuleExpansionProgress, if (failPbModuleExpanded) 1f else 0f)
         layoutWidgets()
 
         val theme = ThemeManager.current()
@@ -141,6 +144,8 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
 
         val headerY = body.top + 10
         drawText(context, "Dungeon Modules", body.centerX() - textRenderer.getWidth("Dungeon Modules") / 2, headerY, theme.lightTextAccent)
+        drawFailPbModuleHeader(context, mouseX.toDouble(), mouseY.toDouble(), theme)
+        drawFailPbExpandedModule(context, mouseX.toDouble(), mouseY.toDouble(), theme)
         drawModuleHeader(context, mouseX.toDouble(), mouseY.toDouble(), theme)
         drawExpandedModule(context, mouseX.toDouble(), mouseY.toDouble(), theme)
 
@@ -190,6 +195,28 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
                         "Expanded dungeon autokick settings."
                     } else {
                         "Collapsed dungeon autokick settings."
+                    }
+                    statusColor = ThemeManager.current().subtleText
+                    return true
+                }
+            }
+        }
+
+        if (failPbHeaderRect().contains(mouseX, mouseY)) {
+            when (button) {
+                0 -> {
+                    val enabled = DungeonPuzzleFailPbStore.setEnabled(!DungeonPuzzleFailPbStore.isEnabled())
+                    statusMessage = "Dungeon puzzle fail PBs ${if (enabled) "enabled" else "disabled"}."
+                    statusColor = 0xFF88FF88.toInt()
+                    return true
+                }
+
+                1 -> {
+                    failPbModuleExpanded = !failPbModuleExpanded
+                    statusMessage = if (failPbModuleExpanded) {
+                        "Expanded dungeon puzzle fail PB settings."
+                    } else {
+                        "Collapsed dungeon puzzle fail PB settings."
                     }
                     statusColor = ThemeManager.current().subtleText
                     return true
@@ -247,6 +274,13 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
                 toggleCheck(index)
                 return true
             }
+        }
+
+        if (failPbModuleExpansionProgress >= 0.9f && failPbAnnounceRowRect().contains(mouseX, mouseY)) {
+            val enabled = DungeonPuzzleFailPbStore.setAnnounceInChatEnabled(!DungeonPuzzleFailPbStore.isAnnounceInChatEnabled())
+            statusMessage = "Dungeon puzzle fail PB announce in chat ${if (enabled) "enabled" else "disabled"}."
+            statusColor = 0xFF88FF88.toInt()
+            return true
         }
 
         return super.mouseClicked(click, doubled)
@@ -310,6 +344,27 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
         drawText(context, if (moduleExpanded) "v" else ">", rect.right - 14, rect.top + 8, theme.lightTextAccent)
     }
 
+    private fun drawFailPbModuleHeader(context: DrawContext, mouseX: Double, mouseY: Double, theme: ThemePalette) {
+        val rect = failPbHeaderRect()
+        val hovered = rect.contains(mouseX, mouseY)
+        val enabled = DungeonPuzzleFailPbStore.isEnabled()
+        val fill = when {
+            hovered && leftMouseDown -> theme.darkAccent
+            hovered -> theme.secondaryPanel
+            enabled -> theme.withAlpha(theme.hoverAccent, 0x70)
+            else -> theme.panelBackground
+        }
+        val border = if (hovered || enabled) theme.primaryAccent else theme.idleBorder
+        val textColor = if (enabled) theme.hoverAccent else theme.lightTextAccent
+        context.fill(rect.left, rect.top, rect.right, rect.bottom, fill)
+        ThemeRenderer.drawOutline(context, rect.left, rect.top, rect.width(), rect.height(), border)
+        drawText(context, "Dungeon Puzzle Fail PBs", rect.left + 10, rect.top + 8, textColor)
+        val stateText = if (enabled) "ON" else "OFF"
+        val stateWidth = textRenderer.getWidth(stateText)
+        drawText(context, stateText, rect.right - 24 - stateWidth, rect.top + 8, if (enabled) theme.hoverAccent else theme.subtleText)
+        drawText(context, if (failPbModuleExpanded) "v" else ">", rect.right - 14, rect.top + 8, theme.lightTextAccent)
+    }
+
     private fun drawExpandedModule(context: DrawContext, mouseX: Double, mouseY: Double, theme: ThemePalette) {
         if (moduleExpansionProgress <= 0.01f) {
             updateWidgetVisibility()
@@ -344,6 +399,33 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
         updateWidgetVisibility()
     }
 
+    private fun drawFailPbExpandedModule(context: DrawContext, mouseX: Double, mouseY: Double, theme: ThemePalette) {
+        if (failPbModuleExpansionProgress <= 0.01f) {
+            return
+        }
+
+        val panel = failPbContentRect()
+        val fullTop = panel.top
+        val fullBottom = panel.bottom
+        val animatedBottom = lerpInt(fullTop, fullBottom, failPbModuleExpansionProgress)
+        val animatedTop = fullTop - ((1f - failPbModuleExpansionProgress) * 12f).roundToInt()
+        context.fill(
+            panel.left,
+            animatedTop,
+            panel.right,
+            animatedBottom,
+            theme.withAlpha(theme.secondaryPanel, (96 + failPbModuleExpansionProgress * 72f).roundToInt().coerceIn(0, 255)),
+        )
+        ThemeRenderer.drawOutline(context, panel.left, animatedTop, panel.width(), (animatedBottom - animatedTop).coerceAtLeast(1), theme.idleBorder)
+
+        if (failPbModuleExpansionProgress < 0.35f) {
+            return
+        }
+
+        drawText(context, "Tracks your fastest fail time for supported dungeon puzzles.", panel.left + 14, panel.top + 12, theme.subtleText)
+        drawFailPbToggleRow(context, mouseX, mouseY, theme)
+    }
+
     private fun updateWidgetVisibility() {
         val visible = moduleExpansionProgress >= 0.9f
         floorFields.values.forEach {
@@ -357,8 +439,12 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
     }
 
     private fun moduleHeaderRect(): Rect {
+        val failHeader = failPbHeaderRect()
+        val gap = 14
+        val failContentHeight = failPbExpandedHeight()
         val body = bodyRect()
-        return Rect(body.left + 12, body.top + 36, body.right - 12, body.top + 60)
+        val top = failHeader.bottom + gap + lerpInt(0, failContentHeight, failPbModuleExpansionProgress)
+        return Rect(body.left + 12, top, body.right - 12, top + 24)
     }
 
     private fun expandedContentTop(): Int = moduleHeaderRect().bottom + 20
@@ -368,6 +454,18 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
         val body = bodyRect()
         return Rect(header.left, header.bottom + 10, header.right, body.bottom - 52)
     }
+
+    private fun failPbHeaderRect(): Rect {
+        val body = bodyRect()
+        return Rect(body.left + 12, body.top + 36, body.right - 12, body.top + 60)
+    }
+
+    private fun failPbContentRect(): Rect {
+        val header = failPbHeaderRect()
+        return Rect(header.left, header.bottom + 10, header.right, header.bottom + 10 + failPbExpandedHeight())
+    }
+
+    private fun failPbExpandedHeight(): Int = 58
 
     private fun layoutWidgets() {
         val moduleLayout = moduleLayout()
@@ -734,6 +832,37 @@ class ThrowerListDungeonScreen(private val parent: ThrowerListListScreen) : Scre
             checkboxRowHeight = 18,
             checkboxRowGap = 22,
         )
+    }
+
+    private fun drawFailPbToggleRow(context: DrawContext, mouseX: Double, mouseY: Double, theme: ThemePalette) {
+        val row = failPbAnnounceRowRect()
+        val hovered = row.contains(mouseX, mouseY)
+        val checkbox = failPbAnnounceBoxRect()
+        val fill = when {
+            hovered && leftMouseDown -> theme.darkAccent
+            hovered -> theme.secondaryPanel
+            else -> theme.panelBackground
+        }
+        context.fill(row.left, row.top, row.right, row.bottom, fill)
+        ThemeRenderer.drawOutline(context, row.left, row.top, row.width(), row.height(), if (hovered) theme.primaryAccent else theme.idleBorder)
+        context.fill(checkbox.left, checkbox.top, checkbox.right, checkbox.bottom, theme.fieldBackground)
+        ThemeRenderer.drawOutline(context, checkbox.left, checkbox.top, checkbox.width(), checkbox.height(), if (hovered) theme.primaryAccent else theme.idleBorder)
+        if (DungeonPuzzleFailPbStore.isAnnounceInChatEnabled()) {
+            context.fill(checkbox.left + 3, checkbox.top + 3, checkbox.right - 3, checkbox.bottom - 3, theme.hoverAccent)
+        }
+        drawText(context, "Announce in chat (/pc)", checkbox.right + 8, row.top + 5, theme.lightTextAccent)
+    }
+
+    private fun failPbAnnounceRowRect(): Rect {
+        val panel = failPbContentRect()
+        return Rect(panel.left + 14, panel.top + 28, panel.right - 14, panel.top + 28 + 22)
+    }
+
+    private fun failPbAnnounceBoxRect(): Rect {
+        val row = failPbAnnounceRowRect()
+        val size = 12
+        val top = row.top + (row.height() - size) / 2
+        return Rect(row.left + 8, top, row.left + 8 + size, top + size)
     }
 
     private fun checkBoxRect(index: Int): Rect {

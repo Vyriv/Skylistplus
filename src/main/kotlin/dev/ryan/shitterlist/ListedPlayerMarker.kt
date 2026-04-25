@@ -8,10 +8,22 @@ import net.minecraft.text.Style
 import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import java.util.Optional
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 object ListedPlayerMarker {
     private data class TokenRange(val start: Int, val endExclusive: Int)
     private data class MarkerRange(val start: Int, val endExclusive: Int, val kind: MarkerKind)
+    private data class MarkerLookupSnapshot(
+        val configVersion: Long = Long.MIN_VALUE,
+        val remoteVersion: Long = Long.MIN_VALUE,
+        val usernameMarkerKinds: Map<String, MarkerKind> = emptyMap(),
+        val hasMarkers: Boolean = false,
+    )
+    private data class CachedProfileResolution(
+        val normalizedUsername: String?,
+        val markerKind: CachedMarkerKind,
+    )
 
     private enum class MarkerKind(
         val legacyPrefix: String,
@@ -22,8 +34,25 @@ object ListedPlayerMarker {
         IGNORED("\u00A77\u00A7l! ", "\u00A77\u00A7l !", Formatting.GRAY),
     }
 
+    private enum class CachedMarkerKind {
+        LISTED,
+        IGNORED,
+        NONE;
+
+        fun toMarkerKind(): MarkerKind? =
+            when (this) {
+                LISTED -> MarkerKind.LISTED
+                IGNORED -> MarkerKind.IGNORED
+                NONE -> null
+            }
+    }
+
     private const val legacyFormat = '\u00A7'
     private val suppressWorldLabels = ThreadLocal.withInitial { false }
+    @Volatile
+    private var lookupSnapshot = MarkerLookupSnapshot()
+    private val usernameMarkerCache = ConcurrentHashMap<String, CachedMarkerKind>()
+    private val profileMarkerCache = ConcurrentHashMap<UUID, CachedProfileResolution>()
 
     fun containsListedName(text: String?): Boolean = containsMarkedName(text)
 
@@ -32,11 +61,11 @@ object ListedPlayerMarker {
             return false
         }
 
-        val normalizedText = stripLegacyFormatting(text)
-        if (listedUsernames().isEmpty() && ignoredUsernames().isEmpty()) {
+        val snapshot = currentLookupSnapshot()
+        if (!snapshot.hasMarkers) {
             return false
         }
-
+        val normalizedText = stripLegacyFormatting(text)
         return findTokenRanges(normalizedText).any { range ->
             !isMarked(normalizedText, range.start, range.endExclusive) &&
                 markerKindForToken(normalizedText.substring(range.start, range.endExclusive)) != null
@@ -278,34 +307,83 @@ object ListedPlayerMarker {
             return null
         }
 
-        return markerKindForUsername(profile.name)
+        val normalizedUsername = normalizeUsernameKey(profile.name)
+        val profileId = profile.id
+        if (profileId != null) {
+            profileMarkerCache[profileId]?.takeIf { it.normalizedUsername == normalizedUsername }?.let { cached ->
+                return cached.markerKind.toMarkerKind()
+            }
+        }
+
+        val markerKind = markerKindForUsername(profile.name)
+        if (profileId != null) {
+            profileMarkerCache[profileId] = CachedProfileResolution(
+                normalizedUsername = normalizedUsername,
+                markerKind = markerKind.toCachedMarkerKind(),
+            )
+        }
+        return markerKind
     }
 
     private fun markerKindForUsername(username: String?): MarkerKind? {
-        if (username.isNullOrBlank()) {
-            return null
-        }
-
-        val normalized = username.lowercase()
-        return when {
-            normalized in ignoredUsernames() -> MarkerKind.IGNORED
-            normalized in listedUsernames() -> MarkerKind.LISTED
-            else -> null
-        }
+        val normalized = normalizeUsernameKey(username) ?: return null
+        return usernameMarkerCache.computeIfAbsent(normalized) {
+            currentLookupSnapshot().usernameMarkerKinds[normalized].toCachedMarkerKind()
+        }.toMarkerKind()
     }
 
     private fun markerKindForToken(token: String): MarkerKind? =
         markerKindForUsername(token.removePrefix("[").substringAfterLast("] ").trim())
 
-    private fun listedUsernames(): Set<String> = buildSet {
-        addAll(ConfigManager.localListedUsernames())
-        addAll(RemoteListManager.listedUsernames())
+    private fun currentLookupSnapshot(): MarkerLookupSnapshot {
+        val configState = ConfigManagerCompat.listedMarkerState()
+        val configVersion = configState.versionToken
+        val remoteVersion = RemoteListManager.dataVersion()
+        val current = lookupSnapshot
+        if (current.configVersion == configVersion && current.remoteVersion == remoteVersion) {
+            return current
+        }
+
+        synchronized(this) {
+            val refreshed = lookupSnapshot
+            if (refreshed.configVersion == configVersion && refreshed.remoteVersion == remoteVersion) {
+                return refreshed
+            }
+
+            val usernameMarkerKinds = linkedMapOf<String, MarkerKind>()
+            configState.localIgnoredUsernames.forEach { usernameMarkerKinds[it] = MarkerKind.IGNORED }
+            configState.miscIgnoredUsernameSet.forEach { usernameMarkerKinds[it] = MarkerKind.IGNORED }
+            configState.localListedUsernames.forEach { username ->
+                usernameMarkerKinds.putIfAbsent(username, MarkerKind.LISTED)
+            }
+            RemoteListManager.listedUsernames().forEach { username ->
+                usernameMarkerKinds.putIfAbsent(username, MarkerKind.LISTED)
+            }
+
+            val rebuilt = MarkerLookupSnapshot(
+                configVersion = configVersion,
+                remoteVersion = remoteVersion,
+                usernameMarkerKinds = usernameMarkerKinds,
+                hasMarkers = usernameMarkerKinds.isNotEmpty(),
+            )
+            lookupSnapshot = rebuilt
+            usernameMarkerCache.clear()
+            profileMarkerCache.clear()
+            return rebuilt
+        }
     }
 
-    private fun ignoredUsernames(): Set<String> = buildSet {
-        addAll(ConfigManager.localIgnoredUsernames())
-        addAll(ConfigManager.miscIgnoredUsernames().map { it.lowercase() })
-    }
+    private fun normalizeUsernameKey(username: String?): String? =
+        username?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.lowercase()
+
+    private fun MarkerKind?.toCachedMarkerKind(): CachedMarkerKind =
+        when (this) {
+            MarkerKind.LISTED -> CachedMarkerKind.LISTED
+            MarkerKind.IGNORED -> CachedMarkerKind.IGNORED
+            null -> CachedMarkerKind.NONE
+        }
 
     private fun stripLegacyFormatting(text: String): String {
         if (legacyFormat !in text) {

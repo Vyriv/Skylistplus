@@ -6,10 +6,12 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 
 class SkylistPlusMod : ClientModInitializer {
     override fun onInitializeClient() {
+        DungeonPuzzleFailPbStore.load()
         RemoteListManager.start()
         LobbyDetector.register()
         GitHubUpdateChecker.register()
         ReminderManager.register()
+        DungeonPuzzleFailPbTracker.register()
 
         ThrowerListGuiLauncher.registerMainScreenProvider { request ->
             val tab = when (request.view) {
@@ -50,6 +52,7 @@ class SkylistPlusMod : ClientModInitializer {
 
         ClientPlayConnectionEvents.DISCONNECT.register { _, _ ->
             plusListener.reset()
+            DungeonPuzzleFailPbTracker.reset()
         }
     }
 

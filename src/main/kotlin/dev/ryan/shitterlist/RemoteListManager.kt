@@ -10,6 +10,7 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
 
 object RemoteListManager {
     private const val remoteUrl = "https://jsonhosting.com/api/json/e7619cc9/raw"
@@ -21,12 +22,25 @@ object RemoteListManager {
     private val remoteTimestamps = ConcurrentHashMap<String, Long?>()
     private val remoteUsernames = ConcurrentHashMap<String, String>()
     private val remoteTags = ConcurrentHashMap<String, List<String>>()
+    private data class RemoteLookupSnapshot(
+        val dataVersion: Long = Long.MIN_VALUE,
+        val configVersion: Long = Long.MIN_VALUE,
+        val usernameByUuid: Map<String, String> = emptyMap(),
+        val uuidByUsername: Map<String, String> = emptyMap(),
+        val listedUsernames: Set<String> = emptySet(),
+    )
 
     @Volatile
     private var started = false
 
     @Volatile
     private var lastRefreshCompletedAt: Long? = null
+
+    @Volatile
+    private var remoteDataVersion = 0L
+
+    @Volatile
+    private var lookupSnapshot = RemoteLookupSnapshot()
 
     fun start() {
         if (started) {
@@ -75,21 +89,23 @@ object RemoteListManager {
             return null
         }
 
-        return remoteUsernames.entries.firstOrNull {
-            it.value.equals(username, ignoreCase = true)
-        }?.let { entry ->
-            if (ProtectedSkylistEntries.isProtected(entry.value, entry.key)) {
+        val normalizedUsername = normalizeUsernameKey(username) ?: return null
+        val snapshot = currentLookupSnapshot()
+        val uuid = snapshot.uuidByUsername[normalizedUsername] ?: return null
+        val resolvedUsername = snapshot.usernameByUuid[uuid] ?: return null
+        return uuid.let { normalizedUuid ->
+            if (ProtectedSkylistEntries.isProtected(resolvedUsername, normalizedUuid)) {
                 return@let null
             }
 
-            val reason = remoteReasons[entry.key] ?: return@let null
+            val reason = remoteReasons[normalizedUuid] ?: return@let null
             RemoteEntry(
-                username = entry.value,
-                uuid = entry.key,
+                username = resolvedUsername,
+                uuid = normalizedUuid,
                 reason = reason,
-                ts = remoteTimestamps[entry.key],
-                isDisabled = ConfigManager.isRemoteDisabled(entry.key),
-                tags = remoteTags[entry.key].orEmpty(),
+                ts = remoteTimestamps[normalizedUuid],
+                isDisabled = ConfigManager.isRemoteDisabled(normalizedUuid),
+                tags = remoteTags[normalizedUuid].orEmpty(),
             )
         }
     }
@@ -101,30 +117,35 @@ object RemoteListManager {
             remoteTimestamps.remove(normalizedUuid)
             remoteUsernames.remove(normalizedUuid)
             remoteTags.remove(normalizedUuid)
+            markLookupDirty()
             return
         }
 
         remoteUsernames[normalizedUuid] = username
+        markLookupDirty()
     }
 
-    fun listEntries(): List<RemoteEntry> = remoteReasons.entries
-        .filterNot { ProtectedSkylistEntries.isProtected(uuid = it.key) }
-        .map { entry ->
-            val uuid = entry.key
+    fun listEntries(): List<RemoteEntry> {
+        val snapshot = currentLookupSnapshot()
+        return remoteReasons.entries
+            .filterNot { ProtectedSkylistEntries.isProtected(uuid = it.key) }
+            .map { entry ->
+                val uuid = entry.key
             RemoteEntry(
-                username = remoteUsernames[uuid] ?: uuid,
+                username = snapshot.usernameByUuid[uuid] ?: uuid,
                 uuid = uuid,
                 reason = entry.value,
                 ts = remoteTimestamps[uuid],
                 isDisabled = ConfigManager.isRemoteDisabled(uuid),
                 tags = remoteTags[uuid].orEmpty(),
             )
-        }
-        .sortedBy { it.username.lowercase() }
+            }
+            .sortedBy { it.username.lowercase(Locale.ROOT) }
+    }
 
-    fun listedUsernames(): Set<String> = listEntries()
-        .filterNot { it.isDisabled }
-        .mapTo(linkedSetOf()) { it.username.lowercase() }
+    fun listedUsernames(): Set<String> = currentLookupSnapshot().listedUsernames
+
+    fun dataVersion(): Long = remoteDataVersion
 
     fun lastRefreshCompletedAt(): Long? = lastRefreshCompletedAt
 
@@ -181,9 +202,11 @@ object RemoteListManager {
                 } else {
                     remoteUsernames[normalizedUuid] = username
                 }
+                markLookupDirty()
             }
         }
 
+        markLookupDirty()
         lastRefreshCompletedAt = System.currentTimeMillis()
 
         ThrowerListMod.logger.info("Loaded {} remote thrower entries", remoteReasons.size)
@@ -244,4 +267,50 @@ object RemoteListManager {
                 ?.takeIf { it.isNotEmpty() }
         }.distinct()
     }
+
+    private fun currentLookupSnapshot(): RemoteLookupSnapshot {
+        val configVersion = ConfigManagerCompat.remoteDisableVersion(remoteReasons.keys)
+        val dataVersion = remoteDataVersion
+        val current = lookupSnapshot
+        if (current.dataVersion == dataVersion && current.configVersion == configVersion) {
+            return current
+        }
+
+        synchronized(this) {
+            val refreshed = lookupSnapshot
+            if (refreshed.dataVersion == dataVersion && refreshed.configVersion == configVersion) {
+                return refreshed
+            }
+
+            val usernameByUuid = remoteUsernames.entries.associate { (uuid, username) -> uuid to username }
+            val uuidByUsername = linkedMapOf<String, String>()
+            val listedUsernames = linkedSetOf<String>()
+            usernameByUuid.forEach { (uuid, username) ->
+                val normalizedUsername = normalizeUsernameKey(username) ?: return@forEach
+                uuidByUsername.putIfAbsent(normalizedUsername, uuid)
+                if (!ConfigManager.isRemoteDisabled(uuid)) {
+                    listedUsernames.add(normalizedUsername)
+                }
+            }
+
+            val rebuilt = RemoteLookupSnapshot(
+                dataVersion = dataVersion,
+                configVersion = configVersion,
+                usernameByUuid = usernameByUuid,
+                uuidByUsername = uuidByUsername,
+                listedUsernames = listedUsernames,
+            )
+            lookupSnapshot = rebuilt
+            return rebuilt
+        }
+    }
+
+    private fun markLookupDirty() {
+        remoteDataVersion++
+    }
+
+    private fun normalizeUsernameKey(username: String?): String? =
+        username?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.lowercase(Locale.ROOT)
 }

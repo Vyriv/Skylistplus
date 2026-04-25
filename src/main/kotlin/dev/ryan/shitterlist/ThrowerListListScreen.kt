@@ -572,16 +572,17 @@ class ThrowerListListScreen(
         CompletableFuture.allOf(
             RemoteListManager.refreshAsync(),
             ScammerListManager.refreshAsync(),
+            SkylistBaseCommandHandler.refreshCosmetics(),
         ).whenComplete { _, throwable ->
             ThrowerListMod.client.execute {
                 refreshingRemote = false
                 refreshButton?.active = true
                 if (throwable != null) {
                     val scammerFailure = ScammerListManager.lastFailureReason()
-                    showStatus(scammerFailure ?: "Remote refresh failed. Check your connection and try again.", statusErrorColor)
+                    showStatus(scammerFailure ?: "Remote and cosmetics refresh failed. Check your connection and try again.", statusErrorColor)
                 } else {
                     refreshEntries()
-                    showStatus("Remote data refreshed.", statusSuccessColor)
+                    showStatus("Remote data and cosmetics refreshed.", statusSuccessColor)
                 }
             }
         }
