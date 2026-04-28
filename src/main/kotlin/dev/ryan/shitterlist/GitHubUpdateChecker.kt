@@ -181,6 +181,7 @@ object GitHubUpdateChecker {
         }
 
         val cleanTag = releaseTag.removePrefix("v").trim()
+        val releaseBody = parsed.get("body")?.takeIf { !it.isJsonNull }?.asString
         val minecraftVersion = SkylistPlusRuntimeVersion.minecraftVersion()
         val asset = parsed.getAsJsonArray("assets")
             ?.mapNotNull { entry ->
@@ -204,6 +205,7 @@ object GitHubUpdateChecker {
             latestVersion = "$cleanTag-$minecraftVersion",
             minecraftVersion = minecraftVersion,
             releaseUrl = releaseUrl.ifEmpty { ThrowerListLinks.githubLatestReleaseUrl },
+            releaseBody = releaseBody,
             assetName = assetName,
             assetUrl = assetUrl,
         )
@@ -249,6 +251,7 @@ object GitHubUpdateChecker {
 
         val stagedJarPath = updaterDir.resolve(update.assetName)
         downloadAsset(update.assetUrl, stagedJarPath)
+        PostUpdateChangelogManager.stagePendingNotice(update.latestVersion, update.releaseUrl, update.releaseBody)
 
         val targetJarPath = currentJarPath.parent.resolve(update.assetName)
         val scriptPath = writeInstallerScript(
@@ -370,6 +373,7 @@ object GitHubUpdateChecker {
         val latestVersion: String,
         val minecraftVersion: String,
         val releaseUrl: String,
+        val releaseBody: String?,
         val assetName: String,
         val assetUrl: String,
     )

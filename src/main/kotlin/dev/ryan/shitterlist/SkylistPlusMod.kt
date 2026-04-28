@@ -10,6 +10,7 @@ class SkylistPlusMod : ClientModInitializer {
         RemoteListManager.start()
         LobbyDetector.register()
         GitHubUpdateChecker.register()
+        PostUpdateChangelogManager.register()
         ReminderManager.register()
         DungeonPuzzleFailPbTracker.register()
 
