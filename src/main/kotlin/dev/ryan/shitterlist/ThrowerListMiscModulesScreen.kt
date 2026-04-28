@@ -29,7 +29,6 @@ class ThrowerListMiscModulesScreen(
     private var sidebarAnimationProgress = 1f
     private var frameWidthProgress = 0f
     private var ignoreListExpanded = false
-    private var swingSpeedExpanded = false
     private var statusMessage: String? = null
     private var statusColor = 0xFF7FD6FF.toInt()
     private var listOffset = 0
@@ -98,10 +97,6 @@ class ThrowerListMiscModulesScreen(
         drawDropdown(context, ignoreHeader, "Ignorelist", ConfigManager.isMiscIgnoreListEnabled(), ignoreListExpanded, mouseX.toDouble(), mouseY.toDouble(), theme)
         drawIgnoreListContent(context, mouseX.toDouble(), mouseY.toDouble(), theme)
 
-        val swingHeader = swingSpeedHeaderRect()
-        drawDropdown(context, swingHeader, "Swing Speed", ConfigManager.isSwingSpeedEnabled(), swingSpeedExpanded, mouseX.toDouble(), mouseY.toDouble(), theme)
-        drawSwingSpeedContent(context, mouseX.toDouble(), mouseY.toDouble(), theme)
-
         super.render(context, mouseX, mouseY, deltaTicks)
         ThemeRenderer.drawButton(context, addButton, mouseX.toDouble(), mouseY.toDouble(), leftMouseDown, theme)
         ThemeRenderer.drawButton(context, backButton, mouseX.toDouble(), mouseY.toDouble(), leftMouseDown, theme)
@@ -130,34 +125,11 @@ class ThrowerListMiscModulesScreen(
 
                 1 -> {
                     ignoreListExpanded = !ignoreListExpanded
-                    if (ignoreListExpanded) swingSpeedExpanded = false
                     syncVisibility()
                     showStatus(if (ignoreListExpanded) "Expanded misc ignore list settings." else "Collapsed misc ignore list settings.", ThemeManager.current().subtleText)
                     return true
                 }
             }
-        }
-
-        if (swingSpeedHeaderRect().contains(mouseX, mouseY)) {
-            when (button) {
-                0 -> {
-                    val enabled = ConfigManager.setSwingSpeedEnabled(!ConfigManager.isSwingSpeedEnabled())
-                    showStatus("Swing speed ${if (enabled) "enabled" else "disabled"}.", 0xFF88FF88.toInt())
-                    return true
-                }
-                1 -> {
-                    swingSpeedExpanded = !swingSpeedExpanded
-                    if (swingSpeedExpanded) ignoreListExpanded = false
-                    syncVisibility()
-                    showStatus(if (swingSpeedExpanded) "Expanded swing speed settings." else "Collapsed swing speed settings.", ThemeManager.current().subtleText)
-                    return true
-                }
-            }
-        }
-
-        if (swingSpeedExpanded && swingSpeedSliderRect().contains(mouseX, mouseY) && button == 0) {
-            updateSwingSpeedFromMouse(mouseX)
-            return true
         }
 
         if (button != 0) {
@@ -258,22 +230,6 @@ class ThrowerListMiscModulesScreen(
         return true
     }
 
-    override fun mouseDragged(click: Click, offsetX: Double, offsetY: Double): Boolean {
-        if (swingSpeedExpanded && swingSpeedSliderRect().contains(click.x(), click.y()) && click.button() == 0) {
-            updateSwingSpeedFromMouse(click.x())
-            return true
-        }
-        return super.mouseDragged(click, offsetX, offsetY)
-    }
-
-    private fun updateSwingSpeedFromMouse(mouseX: Double) {
-        val slider = swingSpeedSliderRect()
-        val percent = ((mouseX - slider.left) / slider.width()).coerceIn(0.0, 1.0)
-        // Map 0-100% to 0.1-1.0 swing speed
-        val value = 0.1f + (percent.toFloat() * 0.9f)
-        ConfigManager.setSwingSpeedValue(value)
-    }
-
     private fun drawIgnoreListContent(context: DrawContext, mouseX: Double, mouseY: Double, theme: ThemePalette) {
         if (!ignoreListExpanded) return
         val panel = moduleContentRect()
@@ -283,38 +239,6 @@ class ThrowerListMiscModulesScreen(
         ThemeRenderer.drawTextField(context, ignoreInputField, theme)
         drawInputPlaceholder(context, theme)
         drawIgnoreRows(context, mouseX, mouseY, theme)
-    }
-
-    private fun drawSwingSpeedContent(context: DrawContext, mouseX: Double, mouseY: Double, theme: ThemePalette) {
-        if (!swingSpeedExpanded) return
-        val header = swingSpeedHeaderRect()
-        val panelTop = header.bottom + 10
-        val panelBottom = panelTop + 74
-        val panel = Rect(header.left, panelTop, header.right, panelBottom)
-        context.fill(panel.left, panel.top, panel.right, panel.bottom, theme.withAlpha(theme.secondaryPanel, 138))
-        ThemeRenderer.drawOutline(context, panel.left, panel.top, panel.width(), panel.height(), theme.idleBorder)
-
-        drawText(context, "Configure how slow your swing animation is.", panel.left + 16, panel.top + 12, theme.mutedText)
-
-        val slider = swingSpeedSliderRect()
-        val value = ConfigManager.getSwingSpeedValue()
-        val percent = (value - 0.1f) / 0.9f
-
-        // Slider background
-        context.fill(slider.left, slider.top + 8, slider.right, slider.bottom - 8, theme.panelBackground)
-        ThemeRenderer.drawOutline(context, slider.left, slider.top + 8, slider.width(), slider.height() - 16, theme.idleBorder)
-
-        // Slider fill
-        val fillRight = slider.left + (slider.width() * percent).toInt()
-        context.fill(slider.left, slider.top + 8, fillRight, slider.bottom - 8, theme.primaryAccent)
-
-        // Slider handle
-        val handleX = fillRight - 2
-        context.fill(handleX, slider.top + 4, handleX + 4, slider.bottom - 4, theme.lightTextAccent)
-        ThemeRenderer.drawOutline(context, handleX, slider.top + 4, 4, slider.height() - 8, theme.idleBorder)
-
-        val valueText = "${(value * 100).roundToInt()}%"
-        drawText(context, "Speed: $valueText", slider.right + 10, slider.top + 6, theme.lightTextAccent)
     }
 
     private fun drawDropdown(context: DrawContext, rect: Rect, label: String, enabled: Boolean, expanded: Boolean, mouseX: Double, mouseY: Double, theme: ThemePalette) {
@@ -425,23 +349,6 @@ class ThrowerListMiscModulesScreen(
     private fun moduleHeaderRect(): Rect {
         val body = bodyRect()
         return Rect(body.left + 12, body.top + 36, body.right - 12, body.top + 60)
-    }
-
-    private fun swingSpeedHeaderRect(): Rect {
-        val ignoreHeader = moduleHeaderRect()
-        val offset = if (ignoreListExpanded) moduleContentRect().height() + 8 else 32
-        return Rect(ignoreHeader.left, ignoreHeader.top + offset, ignoreHeader.right, ignoreHeader.bottom + offset)
-    }
-
-    private fun swingSpeedSliderRect(): Rect {
-        return if (swingSpeedExpanded) {
-            val header = swingSpeedHeaderRect()
-            val panelTop = header.bottom + 10
-            Rect(header.left + 16, panelTop + 34, header.right - 80, panelTop + 54)
-        } else {
-            val panel = moduleContentRect()
-            Rect(panel.left + 16, panel.top + 34, panel.right - 80, panel.top + 54)
-        }
     }
 
     private fun moduleContentRect(): Rect {

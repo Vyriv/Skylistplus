@@ -251,7 +251,7 @@ class SkylistPlusPartyListener(
             client.execute {
                 val message = when (result) {
                     null -> "[SL] $target is not on the Skylist or scammer list"
-                    else -> "[SL] ${result.displayName} is on ${result.listPhrase()} for \"${result.reason}\""
+                    else -> "[SL] ${result.displayName} is on ${result.listPhrase()} for \"${result.reason}\"${result.breakdownSuffix()}"
                 }
                 client.player?.networkHandler?.sendChatCommand("$replyCommand $message")
             }
@@ -411,10 +411,10 @@ class SkylistPlusPartyListener(
         TlCheckResult(username, listName, reason, caseTimeMillis = ts)
 
     private fun ScammerListManager.ScammerEntry.toTlCheckResult(): TlCheckResult =
-        TlCheckResult(username, "SBZ scammer", reason, severity.color, creationTimeMillis)
+        TlCheckResult(username, "SBZ scammer", reason, severity.color, creationTimeMillis, ScammerSeverityIntrospection.fromEntry(this))
 
     private fun ScammerCheckService.CheckResult.toTlCheckResult(): TlCheckResult =
-        TlCheckResult(username, sourceLabel, reason, severityColor, caseTimeMillis)
+        TlCheckResult(username, sourceLabel, reason, severityColor, caseTimeMillis, ScammerSeverityIntrospection.fromCheckResult(this))
 
     private enum class PartyRole {
         NONE,
@@ -429,11 +429,24 @@ class SkylistPlusPartyListener(
         val reason: String,
         val severityColor: Int? = null,
         val caseTimeMillis: Long? = null,
+        val severityBreakdown: ScammerSeverityIntrospection.Breakdown? = null,
     ) {
         fun listPhrase(): String =
             when {
                 listName.startsWith("your ", ignoreCase = true) -> "$listName list"
                 else -> "the $listName list"
             }
+
+        fun breakdownSuffix(): String {
+            val result = severityBreakdown ?: return ""
+            val summary = result.reasons.take(3).joinToString("; ")
+            val scoreText = result.score?.let {
+                if (it % 1.0 == 0.0) it.toLong().toString() else String.format("%.2f", it).trimEnd('0').trimEnd('.')
+            } ?: "?"
+            return " [${result.severityLabel ?: "Unknown"} $scoreText, ${result.actionLabel ?: "unknown"}: $summary]"
+        }
     }
+
+    private fun formatScore(value: Double): String =
+        if (value % 1.0 == 0.0) value.toLong().toString() else String.format("%.2f", value).trimEnd('0').trimEnd('.')
 }

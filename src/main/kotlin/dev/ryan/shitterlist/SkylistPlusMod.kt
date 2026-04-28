@@ -39,7 +39,7 @@ class SkylistPlusMod : ClientModInitializer {
             }
 
             ThrowerListMod.client.inGameHud.chatHud.addMessage(
-                ListedPlayerMarker.applyMarkerToChatMessage(NameStyler.applyGradientToChatHeader(message)),
+                ListedPlayerMarker.applyMarkerToChatMessage(message),
             )
             false
         }
@@ -47,8 +47,10 @@ class SkylistPlusMod : ClientModInitializer {
             overlay || !IgnoredPlayerManager.shouldSuppressChatMessage(message, null)
         }
         ClientReceiveMessageEvents.MODIFY_GAME.register { message, _ ->
-            NameStyler.applyGradientToChatHeader(message)
+            message
         }
+
+        ThrowerListMod.logger.info("Skylist+ cosmetic name styling disabled; Skylist handles custom names")
 
         ClientPlayConnectionEvents.DISCONNECT.register { _, _ ->
             plusListener.reset()

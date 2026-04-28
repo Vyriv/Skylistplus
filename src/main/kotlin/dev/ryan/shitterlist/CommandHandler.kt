@@ -1207,10 +1207,10 @@ object CommandHandler {
     }
 
     private fun ScammerListManager.ScammerEntry.toCheckResult(): CheckResult =
-        CheckResult(resolveDisplayName(username, uuid), "SBZ scammer", reason, severity.color)
+        CheckResult(resolveDisplayName(username, uuid), "SBZ scammer", reason, severity.color, ScammerSeverityIntrospection.fromEntry(this))
 
     private fun ScammerCheckService.CheckResult.toCommandResult(): CheckResult =
-        CheckResult(username, sourceLabel, reason, severityColor)
+        CheckResult(username, sourceLabel, reason, severityColor, ScammerSeverityIntrospection.fromCheckResult(this))
 
     private fun isUuid(value: String): Boolean =
         Regex("""^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$""").matches(value)
@@ -1469,6 +1469,7 @@ object CommandHandler {
         val listName: String,
         val reason: String,
         val severityColor: Int? = null,
+        val severityBreakdown: ScammerSeverityIntrospection.Breakdown? = null,
     )
 
     private data class ParsedReminder(
@@ -1485,7 +1486,22 @@ object CommandHandler {
             .append(name)
             .append(Text.literal(" is on the ${result.listName} list for ").formatted(Formatting.RED))
             .append(Text.literal("\"${result.reason}\"").formatted(Formatting.GRAY))
+            .append(result.severityBreakdown?.let(::buildSeverityBreakdownText) ?: Text.empty())
     }
+
+    private fun buildSeverityBreakdownText(result: ScammerSeverityIntrospection.Breakdown): MutableText =
+        Text.empty()
+            .append(Text.literal("\nSeverity: ").formatted(Formatting.DARK_GRAY))
+            .append(Text.literal(result.severityLabel ?: "Unknown").styled { it.withColor((result.severityColor ?: 0xFFFFFF) and 0xFFFFFF) })
+            .append(Text.literal(" | Score: ${result.score?.let(::formatScore) ?: "?"}").formatted(Formatting.YELLOW))
+            .append(Text.literal(" | Action: ${result.actionLabel ?: "unknown"}").formatted(Formatting.GOLD))
+            .append(Text.literal("\nWhy: ${severitySummary(result)}").formatted(Formatting.GRAY))
+
+    private fun severitySummary(result: ScammerSeverityIntrospection.Breakdown): String =
+        result.reasons.take(4).joinToString("; ")
+
+    private fun formatScore(value: Double): String =
+        if (value % 1.0 == 0.0) value.toLong().toString() else String.format("%.2f", value).trimEnd('0').trimEnd('.')
 
     private fun parseReminderInput(input: String): ParsedReminder? {
         val words = input.split(Regex("""\s+""")).filter { it.isNotBlank() }

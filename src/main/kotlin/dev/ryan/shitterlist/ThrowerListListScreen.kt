@@ -51,6 +51,7 @@ class ThrowerListListScreen(
         val source: EntrySource,
         val isRemoteDisabled: Boolean = false,
         val severity: ScammerListManager.Severity? = null,
+        val severityBreakdown: ScammerSeverityIntrospection.Breakdown? = null,
         val altUsernames: List<String> = emptyList(),
         val altUuids: List<String> = emptyList(),
         val discordUsers: List<ScammerListManager.DiscordUser> = emptyList(),
@@ -859,6 +860,7 @@ class ThrowerListListScreen(
 
         if (currentTab == Tab.SCAMMERS) {
             val details = mutableListOf(selected.severity?.label ?: "Unknown severity")
+            selected.severityBreakdown?.let { details += "Score: ${it.score?.let(::formatScore) ?: "?"} | ${it.actionLabel ?: "unknown"}" }
             if (selected.discordLabels.isNotEmpty()) {
                 details += "Discord: ${selected.discordLabels.joinToString(", ")}"
             }
@@ -990,6 +992,7 @@ class ThrowerListListScreen(
                 tags = listOf("scammer"),
                 source = EntrySource.SCAMMER,
                 severity = it.severity,
+                severityBreakdown = ScammerSeverityIntrospection.fromEntry(it),
                 altUsernames = it.altUsernames,
                 altUuids = it.altUuids,
                 discordUsers = it.discordUsers,
@@ -1503,6 +1506,11 @@ class ThrowerListListScreen(
         val dungeon = dungeonButtonRect()
         return Rect(dungeon.left, dungeon.bottom + 6, dungeon.right, dungeon.bottom + 6 + config.buttonHeight)
     }
+
+    fun formatScore(value: Double): String =
+        if (value % 1.0 == 0.0) value.toLong().toString() else String.format("%.2f", value).trimEnd('0').trimEnd('.')
+
+    fun formatAction(action: String): String = action
 
     private fun listsButtonRect(): Rect {
         val sidebar = sidebarFlyoutRect()

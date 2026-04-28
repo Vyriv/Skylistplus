@@ -175,11 +175,27 @@ class ThrowerListEntryProfileScreen(
         y += 16
         drawValueRow(context, "Severity", currentEntry.severity?.label ?: "Unknown", labelX, valueX, y, theme, currentEntry.severity?.color ?: theme.lightTextAccent)
         y += 16
+        currentEntry.severityBreakdown?.let { result ->
+            drawValueRow(context, "Score", result.score?.let(parent::formatScore) ?: "?", labelX, valueX, y, theme, theme.lightTextAccent)
+            y += 16
+            drawValueRow(context, "Action", result.actionLabel ?: "unknown", labelX, valueX, y, theme, theme.lightTextAccent)
+            y += 16
+        }
 
         val remainingReasonLines = ((contentBottom - y - 4) / 10).coerceAtLeast(0)
         if (remainingReasonLines > 0) {
-            val reasonLines = wrapLines(currentEntry.reason.ifBlank { "None" }, (right - valueX).coerceAtLeast(100)).take(remainingReasonLines)
-            drawWrappedRow(context, "Reason", reasonLines, labelX, valueX, y, theme)
+            val availableWidth = (right - valueX).coerceAtLeast(100)
+            val reasonLines = wrapLines(currentEntry.reason.ifBlank { "None" }, availableWidth)
+            val severityLines = currentEntry.severityBreakdown?.reasons?.flatMap { wrapLines(it, availableWidth) }.orEmpty()
+            val combinedLines = buildList {
+                add("Reason:")
+                addAll(reasonLines)
+                if (severityLines.isNotEmpty()) {
+                    add("Why:")
+                    addAll(severityLines)
+                }
+            }.take(remainingReasonLines)
+            drawWrappedRow(context, if (severityLines.isNotEmpty()) "Breakdown" else "Reason", combinedLines, labelX, valueX, y, theme)
         }
     }
 

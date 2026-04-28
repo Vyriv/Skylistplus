@@ -1,7 +1,6 @@
 package dev.ryan.throwerlist.mixin;
 
 import dev.ryan.throwerlist.ListedPlayerMarker;
-import dev.ryan.throwerlist.NameStyler;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -28,9 +27,6 @@ public abstract class SkyHanniCompactTabListMixin {
         }
 
         Text styled = current;
-        if (NameStyler.INSTANCE.containsStyledTargetName(styled.getString())) {
-            styled = NameStyler.INSTANCE.applyNameplateDecorations(styled);
-        }
         if (ListedPlayerMarker.INSTANCE.containsListedName(styled.getString())) {
             styled = ListedPlayerMarker.INSTANCE.applyMarker(styled);
         }
